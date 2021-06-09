@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 
 typedef struct {
     uint16_t id;
@@ -33,7 +34,7 @@ void init_pci() {
 static ssize_t read_at(int at_fd, const char *pathname, char *buffer, size_t count) {
     int fd = openat(at_fd, pathname, O_RDONLY);
     if (fd == -1) {
-        fprintf(stderr,"Failed to open %s\nopenat: %s", pathname, strerrordesc_np(errno));
+        fprintf(stderr,"Failed to open %s", pathname);
         return -1;
     }
     ssize_t bytes_read = read(fd, buffer, count);
@@ -88,8 +89,8 @@ void run_on_pci_nvidia_gpus(void(*callback)(int), int safe_only) {
     if (lseek(pci_devices_fd, 0, SEEK_SET) == (off_t)-1)
         perror("lseek");
     for (;;) {
-        ssize_t size = getdents64(pci_devices_fd, buffer, sizeof(buffer));
-        if (size == -1) {
+			ssize_t size = syscall(SYS_getdents64, pci_devices_fd, buffer, sizeof(buffer));        
+			if (size == -1) {
             perror("getdents64");
             return;;
         }
@@ -102,7 +103,7 @@ void run_on_pci_nvidia_gpus(void(*callback)(int), int safe_only) {
                 if (validate_vendor(fd) && validate_class(fd)) {
                     printf("Device %s: ", dir->d_name);
                     uint16_t device_id = get_device_id(fd);
-                    if (device_id < 0x1b80) {
+                    if (device_id < 0x1b06) {
                         puts("Unsupported; only Pascal and newer GPUs are supported");
                     } else {
                         const char *name = get_supported_device_name(device_id);
@@ -115,7 +116,7 @@ void run_on_pci_nvidia_gpus(void(*callback)(int), int safe_only) {
                     }
                 }
                 if (close(fd))
-                    perror("close");
+                    perror("\nclose");
             }
             pos += dir->d_reclen;
         }
